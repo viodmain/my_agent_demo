@@ -5,9 +5,6 @@ from typing import List, Dict, Any
 from serpapi import SerpApiClient
 import re
 
-load_dotenv()
-
-
 class HelloAgentsLLM:
     def __init__(
         self,
@@ -16,6 +13,7 @@ class HelloAgentsLLM:
         baseUrl: str = None,
         timeout: int = None,
     ):
+        load_dotenv()
         self.model = model or os.getenv("LLM_MODEL_ID")
         self.apiKey = apiKey or os.getenv("LLM_API_KEY")
         self.baseUrl = baseUrl or os.getenv("LLM_BASE_URL")
@@ -38,7 +36,7 @@ class HelloAgentsLLM:
             print("大语言模型响应成功。")
             collected_content = []
             for chunk in response:
-                content = chunk.choices[0].delta.cotent or ""
+                content = chunk.choices[0].delta.content or ""
                 print(content, end="", flush=True)
                 collected_content.append(content)
             print()
@@ -128,9 +126,9 @@ class ReActAgent:
     def __init__(
         self, llm_client: HelloAgentsLLM, tool_excutor: ToolExcutor, max_steps: int = 5
     ):
-        self.client = (llm_client,)
-        self.tool_excutor = (tool_excutor,)
-        self.max_steps = (max_steps,)
+        self.client = llm_client
+        self.tool_excutor = tool_excutor
+        self.max_steps = max_steps
         self.history = []
 
     def Run(self, question: str):
@@ -153,8 +151,34 @@ class ReActAgent:
             if not response_text:
                 print("LLM没有返回响应，结束执行。")
                 break
-            """ to be continued..."""
-    
+            
+            thought, action=self.ParseOutput(response_text)
+            if thought:
+                print(f"Thought: {thought}")
+            if not action:
+               print("没有解析到Action，结束执行。")
+               break
+            if action.startswith("Finish"):
+                final_answer = re.match(r"Finish\[(.*)\]",action).group(1)
+                print(f"最终答案: {final_answer}")
+                return final_answer
+            tool_name, tool_input = self.ParseAction(action)
+            if not tool_name or not tool_input:
+                print("Action格式错误，无法解析工具名称和输入。")
+                continue
+            print(f"执行工具: {tool_name}，输入: {tool_input}")
+            tool_function=self.tool_excutor.GetTool(tool_name)
+            if not tool_function:
+                observition=f"工具 '{tool_name}' 未找到。"
+            else:
+                observition=tool_function(tool_input)
+            print(f"Observision: {observition}")
+            self.history.append(f"action:{action}")
+            self.history.append(f"observition:{observition}")
+        print("达到最大步骤限制，结束执行。")
+        return
+            
+
     def ParseOutput(self,text:str):
         thought_match=re.search(r"Thought:\s*(.*?)(?=\nAction:|$)", text, re.DOTALL)
         action_match=re.search(r"Action:\s*(.*?)$", text, re.DOTALL)
@@ -171,21 +195,18 @@ class ReActAgent:
 
 
 if __name__ == "__main__":
+    # 初始化工具执行器
     tool_excutor = ToolExcutor()
     search_description = "一个网页搜索引擎。当你需要回答关于时事、事实以及在你的知识库中找不到的信息时，应使用此工具。"
     tool_excutor.RegisterTool("Search", search_description, Search)
 
-    print("可用工具：")
-    print(tool_excutor.GetAvailableTools())
+    # 初始化 LLM 客户端
+    llm_client = HelloAgentsLLM()
 
-    print("\n--- 执行 Action: Search['what is harness engineering'] ---")
-    tool_name = "Search"
-    tool_input = "what is harness engineering"
-    tool_func = tool_excutor.GetTool(tool_name)
-
-    if tool_func:
-        observition = tool_func(tool_input)
-        print("========== Observition")
-        print(observition)
-    else:
-        print(f"工具 '{tool_name}' 未找到。")
+    # 初始化并运行 ReAct Agent
+    agent = ReActAgent(llm_client=llm_client, tool_excutor=tool_excutor, max_steps=5)
+    
+    question = "what is harness engineering"
+    print(f"\n=== 开始处理问题：{question} ===\n")
+    result = agent.Run(question)
+    print(f"\n=== 最终结果：{result} ===")
