@@ -107,12 +107,12 @@ class MySimpleAgent(SimpleAgent):
 
         while current_iteration<max_tool_iterations:
             response=self.llm.invoke(messages, **kwargs)
-            tool_calls=self._parse_tool_calls(response)
+            tool_calls=self._parse_tool_calls(response.content)
 
             if tool_calls:
                 print(f"🔧 {self.name} 发现工具调用: {tool_calls}")
                 tool_results=[]
-                clean_response=response
+                clean_response=response.content
 
                 for call in tool_calls:
                     result=self._execute_tool_call(call['tool_name'], call['parameters'])
@@ -124,10 +124,10 @@ class MySimpleAgent(SimpleAgent):
                 messages.append({"role": "user", "content": f"工具执行结果:\n{tool_results_text}\n\n请基于这些结果给出完整的回答。"})
                 current_iteration += 1
                 continue
-            final_response=response
+            final_response=response.content
             break
         if current_iteration >= max_tool_iterations and not final_response:
-            final_response = self.llm.invoke(messages, **kwargs)
+            final_response = self.llm.invoke(messages, **kwargs).content
         self.add_message(Message(input_text, "user"))
         self.add_message(Message(final_response, "assistant"))
         print(f"✅ {self.name} 响应完成")
@@ -146,9 +146,9 @@ class MySimpleAgent(SimpleAgent):
         if not self.enable_tool_calling:
             response=self.llm.invoke(messages=messages,**kwargs) or ""
             self.add_message(Message(input_text, "user"))
-            self.add_message(Message(response, "assistant"))
+            self.add_message(Message(response.content, "assistant"))
             print(f"✅ {self.name} 响应完成")
-            return response
+            return response.content
         return self._run_with_tools(messages, input_text, max_tool_iterations, **kwargs)
     
     def stream_run(self, input_text: str, **kwargs) -> Iterator[str]:
