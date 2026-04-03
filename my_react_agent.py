@@ -27,7 +27,10 @@ Action: 选择一个行动，格式必须是以下之一:
 """
 
 import re
-from typing import Optional, List,Tuple
+import os
+from dotenv import load_dotenv
+from typing import Optional, List,Tuple,Dict,Any
+from serpapi import SerpApiClient
 from hello_agents  import ReActAgent, HelloAgentsLLM,Config,Message,ToolRegistry
 
 class MyReActAgent(ReActAgent):
@@ -97,16 +100,20 @@ class MyReActAgent(ReActAgent):
         self.add_message(Message(input_text, "user"))
         self.add_message(Message(final_answer, "assistant"))
         return final_answer
-    
+
 if __name__ == "__main__":
+    load_dotenv()
     llm=HelloAgentsLLM()
     tool_registry=ToolRegistry()
+    from HelloAgentsLLM import Search
+    tool_registry.register_function("search", "搜索互联网信息", Search)
+    print("✅ 搜索工具注册成功")
     agent=MyReActAgent(
-        name="测试ReActAgent",
+        name="测试 ReActAgent",
         llm=llm,
         tool_registry=tool_registry,
         max_steps=3
     )
-    question="请计算 12 * 8 的结果，并告诉我它的平方是多少？"
+    question="夏天去哪里玩"
     answer=agent.run(question)
-    print(f"最终答案: {answer}")
+    print(f"最终答案：{answer}")
